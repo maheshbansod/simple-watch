@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stdout = stdout();
 
     stdout.execute(cursor::Hide).unwrap();
-    while running.load(Ordering::SeqCst) {
+    loop {
         let output = Command::new("sh").arg("-c").arg(&command).output().unwrap();
         let op_newlines = output.stdout.iter().filter(|i| **i == 10).count();
         let err_newlines = output.stderr.iter().filter(|i| **i == 10).count();
@@ -40,6 +40,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         stdout.write_all(&output.stderr).unwrap();
         stdout.flush().unwrap();
         thread::sleep(settings.interval);
+        if !running.load(Ordering::SeqCst) {
+            // todo: can i stop it without waiting for the thread sleep to complete?
+            break;
+        }
         let sum: u16 = (op_newlines + err_newlines) as u16;
         stdout.queue(cursor::MoveUp(sum)).unwrap();
         stdout
