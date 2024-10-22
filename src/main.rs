@@ -3,6 +3,10 @@ use std::{
     error::Error,
     io::{stdout, Write},
     process::{exit, Command},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread,
     time::Duration,
 };
@@ -18,11 +22,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Usage: {program_name} [-i <I>|--interavl=<I>] <command>");
         exit(2);
     }
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl+C handler");
+
     let mut stdout = stdout();
 
     stdout.execute(cursor::Hide).unwrap();
-    loop {
-        let output = Command::new("sh").arg("-c").arg(&command).output()?;
+    while running.load(Ordering::SeqCst) {
+        let output = Command::new("sh").arg("-c").arg(&command).output().unwrap();
         let op_newlines = output.stdout.iter().filter(|i| **i == 10).count();
         let err_newlines = output.stderr.iter().filter(|i| **i == 10).count();
         stdout.write_all(&output.stdout).unwrap();
@@ -35,6 +46,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .queue(terminal::Clear(terminal::ClearType::FromCursorDown))
             .unwrap();
     }
+    stdout.execute(cursor::Show).unwrap();
+    Ok(())
 }
 
 fn parse_flags(mut args: Args) -> (Settings, String) {
