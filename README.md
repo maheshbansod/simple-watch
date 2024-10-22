@@ -20,5 +20,5 @@ sw cargo check
 ### Installation
 
 ```
-cargo install --git <this repo>
+cargo install --git https://github.com/maheshbansod/simple-watch
 ```
