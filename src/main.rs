@@ -4,7 +4,6 @@ use std::{
     io::{stdout, Write},
     process::{exit, Command},
     sync::{Arc, Condvar, Mutex},
-    thread,
     time::Duration,
 };
 
