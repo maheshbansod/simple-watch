@@ -84,7 +84,11 @@ fn parse_flags(mut args: Args) -> (Settings, String) {
         };
         (settings, args.collect::<Vec<_>>().join(" "))
     } else {
-        (SettingsBuilder::default().build(), first)
+        let rest = args.collect::<Vec<_>>().join(" ");
+        (
+            SettingsBuilder::default().build(),
+            format!("{first} {rest}"),
+        )
     };
     (settings, command)
 }
