@@ -3,10 +3,7 @@ use std::{
     error::Error,
     io::{stdout, Write},
     process::{exit, Command},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::{Arc, Condvar, Mutex},
     thread,
     time::Duration,
 };
@@ -22,10 +19,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Usage: {program_name} [-i <I>|--interavl=<I>] <command>");
         exit(2);
     }
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
+    let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    let pair2 = Arc::clone(&pair);
     ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
+        let (lock, cvar) = &*pair2;
+        let mut running = lock.lock().unwrap();
+        *running = false;
+        cvar.notify_one();
     })
     .expect("Error setting Ctrl+C handler");
 
@@ -34,14 +34,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     stdout.execute(cursor::Hide).unwrap();
     loop {
         let output = Command::new("sh").arg("-c").arg(&command).output().unwrap();
-        let op_newlines = output.stdout.iter().filter(|i| **i == 10).count();
-        let err_newlines = output.stderr.iter().filter(|i| **i == 10).count();
+        let newline_code = 10;
+        let op_newlines = output.stdout.iter().filter(|i| **i == newline_code).count();
+        let err_newlines = output.stderr.iter().filter(|i| **i == newline_code).count();
+        // todo: maybe remove last newline character?
         stdout.write_all(&output.stdout).unwrap();
         stdout.write_all(&output.stderr).unwrap();
         stdout.flush().unwrap();
-        thread::sleep(settings.interval);
-        if !running.load(Ordering::SeqCst) {
-            // todo: can i stop it without waiting for the thread sleep to complete?
+        let (lock, cvar) = &*pair;
+        let timeout_result = cvar
+            .wait_timeout_while(lock.lock().unwrap(), settings.interval, |&mut running| {
+                running
+            })
+            .unwrap();
+        if !timeout_result.1.timed_out() {
+            // it didn't time out - i.e. condition changed so we break
             break;
         }
         let sum: u16 = (op_newlines + err_newlines) as u16;
