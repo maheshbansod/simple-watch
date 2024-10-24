@@ -7,7 +7,16 @@ use std::{
     time::Duration,
 };
 
-use crossterm::{cursor, style::Stylize, terminal, ExecutableCommand, QueueableCommand};
+use crossterm::{
+    cursor,
+    style::Stylize,
+    terminal::{self, disable_raw_mode, enable_raw_mode},
+    ExecutableCommand, QueueableCommand,
+};
+
+mod settings;
+
+use settings::{Settings, SettingsBuilder};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args();
@@ -34,7 +43,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     loop {
         let output = Command::new("sh").arg("-c").arg(&command).output().unwrap();
         let newline_code = 10;
-        let op_newlines = output.stdout.iter().filter(|i| **i == newline_code).count();
+        let op_lines = count_lines(&output.stdout)?;
+        println!("op: {op_lines}");
         let err_newlines = output.stderr.iter().filter(|i| **i == newline_code).count();
         // todo: maybe remove last newline character?
         stdout.write_all(&output.stdout).unwrap();
@@ -50,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             // it didn't time out - i.e. condition changed so we break
             break;
         }
-        let sum: u16 = (op_newlines + err_newlines) as u16;
+        let sum: u16 = (op_lines + err_newlines as i16) as u16;
         stdout.queue(cursor::MoveUp(sum)).unwrap();
         stdout
             .queue(terminal::Clear(terminal::ClearType::FromCursorDown))
@@ -93,41 +103,31 @@ fn parse_flags(mut args: Args) -> (Settings, String) {
     (settings, command)
 }
 
-#[derive(Debug)]
-struct Settings {
-    interval: Duration,
-}
-
-#[derive(Default)]
-struct SettingsBuilder {
-    interval: Option<Duration>,
-}
-
-impl SettingsBuilder {
-    fn add_short_arg(mut self, arg: &str, value: &str) -> Self {
-        match arg {
-            "i" => {
-                let m: u64 = value.parse().unwrap();
-                self.interval = Some(Duration::from_millis(m));
-            }
-            _ => panic!("unknown arg"),
+fn count_lines(buf: &[u8]) -> Result<i16, Box<dyn Error>> {
+    let terminal_size = terminal::size()?;
+    let terminal_width = terminal_size.0;
+    let terminal_height = terminal_size.1;
+    let newline_code = 10;
+    let mut count = 0;
+    let mut line_len = 0;
+    for ch in buf {
+        if *ch == newline_code {
+            // so till now is one line
+            count += 1;
+            count += line_len / terminal_width;
+            line_len = 0;
+        } else {
+            line_len += 1;
         }
-        self
-    }
-    fn add_long_arg(mut self, arg: &str, value: &str) -> Self {
-        match arg {
-            "interval" => {
-                let m: u64 = value.parse().unwrap();
-                self.interval = Some(Duration::from_millis(m));
-            }
-            _ => panic!("unknown arg"),
-        }
-        self
     }
 
-    fn build(self) -> Settings {
-        Settings {
-            interval: self.interval.unwrap_or(Duration::from_millis(200)),
-        }
+    let cursor_position = cursor::position()?;
+    let cursor_y = cursor_position.1;
+    if cursor_y + count > terminal_height {
+        // scroll
+        let offset = cursor_y + count - terminal_height;
+        Ok((count + offset) as i16)
+    } else {
+        Ok(count as i16)
     }
 }
