@@ -2,12 +2,22 @@
 name = "simple-watch"
 version = "0.1.0"
 edition = "2021"
+authors = ["Light <mahesh0bansod@gmail.com>"]
+repository = "https://github.com/maheshbansod/simple-watch"
+description = "watch the output of a command continuously"
+keywords = ["watch"]
+license = "MIT"
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
 
 [dependencies]
 crossterm = "0.28.1"
 ctrlc = "3.4.5"
 
 [profile.release]
+debug = false
+lto = "fat"
 strip = true
+codegen-units = 1
 panic = "abort"
 
