@@ -4,13 +4,12 @@ use std::{
     io::{stdout, Write},
     process::{exit, Command},
     sync::{Arc, Condvar, Mutex},
-    time::Duration,
 };
 
 use crossterm::{
     cursor,
     style::Stylize,
-    terminal::{self, disable_raw_mode, enable_raw_mode},
+    terminal::{self},
     ExecutableCommand, QueueableCommand,
 };
 
@@ -22,7 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args();
     let program_name = args.next().unwrap();
     let (settings, command) = parse_flags(args);
-    if command.len() == 0 {
+    if command.is_empty() {
         println!("{}\n", "simple-watch".bold());
         println!("Usage: {program_name} [-i <I>|--interavl=<I>] <command>");
         exit(2);
@@ -42,13 +41,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     stdout.execute(cursor::Hide).unwrap();
     loop {
         let output = Command::new("sh").arg("-c").arg(&command).output().unwrap();
-        let newline_code = 10;
         let op_lines = count_lines(&output.stdout)?;
-        let err_newlines = output.stderr.iter().filter(|i| **i == newline_code).count();
+        let err_lines = count_lines(&output.stderr)?;
         stdout
             .queue(terminal::Clear(terminal::ClearType::FromCursorDown))
             .unwrap();
-        // todo: maybe remove last newline character?
         stdout.write_all(&output.stdout).unwrap();
         stdout.write_all(&output.stderr).unwrap();
         stdout.flush().unwrap();
@@ -62,7 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             // it didn't time out - i.e. condition changed so we break
             break;
         }
-        let sum: u16 = (op_lines + err_newlines as i16) as u16;
+        let sum = op_lines + err_lines;
         stdout.queue(cursor::MoveUp(sum)).unwrap();
     }
     stdout.execute(cursor::Show).unwrap();
@@ -102,10 +99,9 @@ fn parse_flags(mut args: Args) -> (Settings, String) {
     (settings, command)
 }
 
-fn count_lines(buf: &[u8]) -> Result<i16, Box<dyn Error>> {
+fn count_lines(buf: &[u8]) -> Result<u16, Box<dyn Error>> {
     let terminal_size = terminal::size()?;
     let terminal_width = terminal_size.0;
-    let terminal_height = terminal_size.1;
     let newline_code = 10;
     let mut count = 0;
     let mut line_len = 0;
@@ -120,13 +116,5 @@ fn count_lines(buf: &[u8]) -> Result<i16, Box<dyn Error>> {
         }
     }
 
-    let cursor_position = cursor::position()?;
-    let cursor_y = cursor_position.1;
-    if cursor_y + count > terminal_height {
-        // scroll
-        let offset = cursor_y + count - terminal_height;
-        Ok((count + offset) as i16)
-    } else {
-        Ok(count as i16)
-    }
+    Ok(count)
 }
