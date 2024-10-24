@@ -44,8 +44,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         let output = Command::new("sh").arg("-c").arg(&command).output().unwrap();
         let newline_code = 10;
         let op_lines = count_lines(&output.stdout)?;
-        println!("op: {op_lines}");
         let err_newlines = output.stderr.iter().filter(|i| **i == newline_code).count();
+        stdout
+            .queue(terminal::Clear(terminal::ClearType::FromCursorDown))
+            .unwrap();
         // todo: maybe remove last newline character?
         stdout.write_all(&output.stdout).unwrap();
         stdout.write_all(&output.stderr).unwrap();
@@ -62,9 +64,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         let sum: u16 = (op_lines + err_newlines as i16) as u16;
         stdout.queue(cursor::MoveUp(sum)).unwrap();
-        stdout
-            .queue(terminal::Clear(terminal::ClearType::FromCursorDown))
-            .unwrap();
     }
     stdout.execute(cursor::Show).unwrap();
     Ok(())
